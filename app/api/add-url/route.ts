@@ -66,7 +66,10 @@ export async function POST(req: Request) {
     }
 
     const r = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "text/html,application/xhtml+xml",
+      },
     });
 
     if (!r.ok) {
@@ -79,9 +82,9 @@ export async function POST(req: Request) {
     const html = await r.text();
     const text = stripHtmlToText(html);
 
-    if (!text) {
+    if (!text || text.length < 100) {
       return NextResponse.json(
-        { error: "Could not extract text from that page." },
+        { error: "Could not extract enough readable text from that URL." },
         { status: 400 }
       );
     }
@@ -102,7 +105,6 @@ export async function POST(req: Request) {
     }
 
     const sourceId = ins.data.id as string;
-
     const chunks = chunkText(text, 3000, 300);
 
     const vectors: any[] = [];

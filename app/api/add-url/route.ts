@@ -42,6 +42,8 @@ async function pineconeUpsert(vectors: any[]) {
 }
 
 export async function POST(req: Request) {
+  let sourceId: string | null = null;
+
   try {
     const token = getBearerToken(req);
     if (!token) {
@@ -65,16 +67,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing url" }, { status: 400 });
     }
 
-    const r = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Accept: "text/html,application/xhtml+xml",
-      },
-    });
+    let r: Response;
+    try {
+      r = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          Accept: "text/html,application/xhtml+xml",
+        },
+        redirect: "follow",
+      });
+    } catch (e: any) {
+      return NextResponse.json(
+        { error: `Could not fetch URL: ${e?.message ?? "network error"}` },
+        { status: 400 }
+      );
+    }
 
     if (!r.ok) {
+      // NEVER pass external status codes directly.
+      // Sites like LinkedIn may return nonstandard codes like 999.
       return NextResponse.json(
-        { error: `Failed to fetch URL: ${r.status}` },
+        { error: `This URL blocked access or could not be fetched (status: ${r.status}). Try a public article or docs page instead.` },
         { status: 400 }
       );
     }
@@ -96,6 +109,7 @@ export async function POST(req: Request) {
         type: "url",
         title,
         source_url: url,
+        status: "processing",
       })
       .select("id")
       .single();
@@ -104,8 +118,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: ins.error.message }, { status: 500 });
     }
 
-    const sourceId = ins.data.id as string;
+    sourceId = ins.data.id as string;
+
     const chunks = chunkText(text, 3000, 300);
+
+    if (chunks.length === 0) {
+      await admin.from("sources").update({ status: "failed" }).eq("id", sourceId);
+      return NextResponse.json(
+        { error: "No chunks were created from extracted webpage text." },
+        { status: 400 }
+      );
+    }
 
     const vectors: any[] = [];
     for (let i = 0; i < chunks.length; i++) {
@@ -134,6 +157,8 @@ export async function POST(req: Request) {
       await pineconeUpsert(batch);
     }
 
+    await admin.from("sources").update({ status: "indexed" }).eq("id", sourceId);
+
     return NextResponse.json({
       ok: true,
       source_id: sourceId,
@@ -142,6 +167,12 @@ export async function POST(req: Request) {
     });
   } catch (e: any) {
     console.error("ADD_URL ERROR:", e);
+
+    if (sourceId) {
+      const admin = supabaseAdmin();
+      await admin.from("sources").update({ status: "failed" }).eq("id", sourceId);
+    }
+
     return NextResponse.json(
       { error: e?.message ?? "Server error" },
       { status: 500 }

@@ -24,7 +24,7 @@ async function pineconeQuery(vector: number[]) {
     },
     body: JSON.stringify({
       vector,
-      topK: 6,
+      topK: 10,
       includeMetadata: true,
     }),
   });
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
     const citations = matches
       .map((m: any) => m.metadata)
       .filter(Boolean)
-      .slice(0, 5);
+      .slice(0, 10);
 
     if (citations.length === 0) {
       const noAnswer = "I don't know based on the provided sources.";
@@ -161,7 +161,7 @@ ${contextBlocks}
         title: c.title,
         source_url: c.source_url,
         storage_path: c.storage_path,
-        text: (c.text ?? "").slice(0, 220),
+        text: c.text ?? "",
       })),
     });
   } catch (e: any) {

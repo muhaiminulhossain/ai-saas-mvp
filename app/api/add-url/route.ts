@@ -145,7 +145,7 @@ export async function POST(req: Request) {
           title,
           source_url: url,
           chunk_index: i,
-          text: chunk.slice(0, 1000),
+          text: chunk,
           created_at: new Date().toISOString(),
         },
       });

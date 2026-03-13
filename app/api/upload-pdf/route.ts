@@ -176,7 +176,7 @@ export async function POST(req: Request) {
           title,
           storage_path: storagePath,
           chunk_index: i,
-          text: chunk.slice(0, 1000),
+          text: chunk,
           created_at: new Date().toISOString(),
         },
       });

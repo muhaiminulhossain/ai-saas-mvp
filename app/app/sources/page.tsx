@@ -10,7 +10,18 @@ type SourceRow = {
   source_url: string | null;
   storage_path: string | null;
   created_at: string;
+  status: "processing" | "indexed" | "failed";
 };
+
+function statusStyles(status: SourceRow["status"]) {
+  if (status === "indexed") {
+    return "border-emerald-400/20 bg-emerald-500/10 text-emerald-300";
+  }
+  if (status === "failed") {
+    return "border-rose-400/20 bg-rose-500/10 text-rose-300";
+  }
+  return "border-amber-400/20 bg-amber-500/10 text-amber-300";
+}
 
 export default function SourcesPage() {
   const [sources, setSources] = useState<SourceRow[]>([]);
@@ -19,6 +30,7 @@ export default function SourcesPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function getAccessToken(): Promise<string | null> {
     const sb = supabaseBrowser();
@@ -38,6 +50,12 @@ export default function SourcesPage() {
 
   useEffect(() => {
     loadSources();
+
+    const timer = setInterval(() => {
+      loadSources();
+    }, 3000);
+
+    return () => clearInterval(timer);
   }, []);
 
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -90,7 +108,7 @@ export default function SourcesPage() {
 
     if (res.ok) {
       setMsg(
-        `Uploaded + indexed ✅ (chunks: ${json?.chunks ?? "?"}, vectors: ${json?.vectors ?? "?"})`
+        `Uploaded + indexing started ✅ (chunks: ${json?.chunks ?? "?"}, vectors: ${json?.vectors ?? "?"})`
       );
       setSelectedFile(null);
       await loadSources();
@@ -141,12 +159,55 @@ export default function SourcesPage() {
     setBusy(false);
 
     if (res.ok) {
-      setMsg(`URL added + indexed ✅ (chunks: ${json?.chunks ?? "?"})`);
+      setMsg(`URL added + indexing started ✅ (chunks: ${json?.chunks ?? "?"})`);
       setUrl("");
       setTitle("");
       await loadSources();
     } else {
       setMsg(json?.error ?? raw?.slice(0, 500) ?? `Add URL failed (${res.status})`);
+    }
+  }
+
+  async function deleteSource(sourceId: string) {
+    const token = await getAccessToken();
+    if (!token) {
+      setMsg("Not logged in. Please sign in again.");
+      return;
+    }
+
+    setDeletingId(sourceId);
+    setMsg("Deleting source...");
+
+    let res: Response;
+    try {
+      res = await fetch("/api/delete-source", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ sourceId }),
+      });
+    } catch (err: any) {
+      setDeletingId(null);
+      setMsg(`Network error: ${err?.message ?? "unknown"}`);
+      return;
+    }
+
+    let json: any = null;
+    let raw = "";
+    try {
+      raw = await res.text();
+      json = raw ? JSON.parse(raw) : null;
+    } catch {}
+
+    setDeletingId(null);
+
+    if (res.ok) {
+      setMsg("Source deleted ✅");
+      await loadSources();
+    } else {
+      setMsg(json?.error ?? raw?.slice(0, 500) ?? `Delete failed (${res.status})`);
     }
   }
 
@@ -239,19 +300,37 @@ export default function SourcesPage() {
             {sources.map((s) => (
               <div
                 key={s.id}
-                className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/20 p-5 md:flex-row md:items-center md:justify-between"
+                className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-5 md:flex-row md:items-center md:justify-between"
               >
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-white">
                     {s.title ?? "(untitled)"}
                   </div>
-                  <div className="mt-1 text-xs text-zinc-500">
+                  <div className="mt-1 truncate text-xs text-zinc-500">
                     {s.type === "url" ? s.source_url : s.storage_path}
                   </div>
                 </div>
 
-                <div className="text-xs text-zinc-500">
-                  {new Date(s.created_at).toLocaleString()}
+                <div className="flex flex-wrap items-center gap-3">
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-medium ${statusStyles(
+                      s.status
+                    )}`}
+                  >
+                    {s.status}
+                  </span>
+
+                  <div className="text-xs text-zinc-500">
+                    {new Date(s.created_at).toLocaleString()}
+                  </div>
+
+                  <button
+                    onClick={() => deleteSource(s.id)}
+                    disabled={deletingId === s.id}
+                    className="rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-300 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {deletingId === s.id ? "Deleting..." : "Delete"}
+                  </button>
                 </div>
               </div>
             ))}

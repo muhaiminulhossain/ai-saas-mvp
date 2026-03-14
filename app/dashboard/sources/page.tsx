@@ -1,4 +1,4 @@
-import SourceList from "@/components/source-list";
+import SourceList from "../../../components/source-list";
 
 export default function SourcesPage() {
   return (

@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteSourceById, getSourceById } from "@/lib/sources";
 
+type RouteContext = {
+  params: Promise<{
+    id: string;
+  }>;
+};
+
 export async function DELETE(
   _req: NextRequest,
-  context: { params: { id: string } }
+  context: RouteContext
 ) {
   try {
-    const id = context.params?.id;
+    const { id } = await context.params;
 
     if (!id) {
       return NextResponse.json(

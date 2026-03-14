@@ -41,7 +41,7 @@ export default function SourceList() {
 
       setSources(data.sources || []);
     } catch (err) {
-      console.error(err);
+      console.error("Load sources error:", err);
       setError(err instanceof Error ? err.message : "Failed to load sources");
     } finally {
       setLoading(false);
@@ -55,6 +55,9 @@ export default function SourceList() {
 
       const res = await fetch(`/api/sources/${id}`, {
         method: "DELETE",
+        headers: {
+          Accept: "application/json",
+        },
       });
 
       const contentType = res.headers.get("content-type") || "";
@@ -73,7 +76,7 @@ export default function SourceList() {
 
       setSources((prev) => prev.filter((item) => item.id !== id));
     } catch (err) {
-      console.error(err);
+      console.error("Delete source error:", err);
       setError(err instanceof Error ? err.message : "Failed to delete source");
     } finally {
       setDeletingId(null);
@@ -86,7 +89,7 @@ export default function SourceList() {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-300">
+      <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-300">
         Loading sources...
       </div>
     );
@@ -95,13 +98,13 @@ export default function SourceList() {
   return (
     <div className="space-y-4">
       {error ? (
-        <div className="rounded-xl border border-red-900 bg-red-950/40 p-4 text-sm text-red-300">
+        <div className="rounded-2xl border border-red-900 bg-red-950/40 p-4 text-sm text-red-300">
           {error}
         </div>
       ) : null}
 
       {sources.length === 0 ? (
-        <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-400">
+        <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-400">
           No sources uploaded yet.
         </div>
       ) : (
@@ -122,6 +125,7 @@ export default function SourceList() {
               </div>
 
               <button
+                type="button"
                 onClick={() => handleDelete(source.id)}
                 disabled={deletingId === source.id}
                 className="ml-4 rounded-xl border border-red-800 px-3 py-2 text-sm text-red-300 transition hover:bg-red-950/50 disabled:cursor-not-allowed disabled:opacity-50"

@@ -14,8 +14,9 @@ const dataDir = path.join(process.cwd(), "data");
 const dataFile = path.join(dataDir, "sources.json");
 
 async function ensureStore() {
+  await fs.mkdir(dataDir, { recursive: true });
+
   try {
-    await fs.mkdir(dataDir, { recursive: true });
     await fs.access(dataFile);
   } catch {
     await fs.writeFile(dataFile, JSON.stringify([], null, 2), "utf-8");
@@ -55,7 +56,6 @@ export async function addSource(source: SourceItem): Promise<void> {
 export async function deleteSourceById(id: string): Promise<boolean> {
   const items = await readStore();
   const target = items.find((item) => item.id === id);
-
   const filtered = items.filter((item) => item.id !== id);
 
   if (filtered.length === items.length) {

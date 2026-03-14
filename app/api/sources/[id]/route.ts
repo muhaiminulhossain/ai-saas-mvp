@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteSourceById, getSourceById } from "@/lib/sources";
 
-type RouteContext = {
-  params: Promise<{
-    id: string;
-  }>;
-};
-
-export async function DELETE(_req: NextRequest, context: RouteContext) {
+export async function DELETE(
+  _req: NextRequest,
+  context: { params: { id: string } }
+) {
   try {
-    const { id } = await context.params;
+    const id = context.params?.id;
 
     if (!id) {
       return NextResponse.json(
@@ -27,7 +24,14 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
       );
     }
 
-    await deleteSourceById(id);
+    const deleted = await deleteSourceById(id);
+
+    if (!deleted) {
+      return NextResponse.json(
+        { success: false, error: "Failed to delete source" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

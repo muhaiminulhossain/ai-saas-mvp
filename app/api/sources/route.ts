@@ -13,7 +13,10 @@ export async function GET() {
     console.error("GET /api/sources failed:", error);
 
     return NextResponse.json(
-      { success: false, error: "Failed to fetch sources" },
+      {
+        success: false,
+        error: "Failed to fetch sources",
+      },
       { status: 500 }
     );
   }

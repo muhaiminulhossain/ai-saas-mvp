@@ -25,15 +25,7 @@ export default function SourceList() {
         cache: "no-store",
       });
 
-      const contentType = res.headers.get("content-type") || "";
-      const raw = await res.text();
-
-      if (!contentType.includes("application/json")) {
-        console.error("GET /api/sources returned non-JSON:", raw);
-        throw new Error("Sources API returned HTML instead of JSON");
-      }
-
-      const data = JSON.parse(raw);
+      const data = await res.json();
 
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Failed to load sources");
@@ -60,15 +52,7 @@ export default function SourceList() {
         },
       });
 
-      const contentType = res.headers.get("content-type") || "";
-      const raw = await res.text();
-
-      if (!contentType.includes("application/json")) {
-        console.error(`DELETE /api/sources/${id} returned non-JSON:`, raw);
-        throw new Error("Delete API returned HTML instead of JSON");
-      }
-
-      const data = JSON.parse(raw);
+      const data = await res.json();
 
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Failed to delete source");

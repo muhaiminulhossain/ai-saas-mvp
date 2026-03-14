@@ -1,15 +1,1 @@
-[
-  {
-    "id": "src_1",
-    "name": "sample-handbook.pdf",
-    "type": "pdf",
-    "createdAt": "2026-03-13T09:00:00.000Z",
-    "filePath": "uploads/sample-handbook.pdf"
-  },
-  {
-    "id": "src_2",
-    "name": "pricing-notes.docx",
-    "type": "docx",
-    "createdAt": "2026-03-13T09:15:00.000Z"
-  }
-]
+[]

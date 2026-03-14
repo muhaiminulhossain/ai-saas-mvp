@@ -25,16 +25,24 @@ export default function SourceList() {
         cache: "no-store",
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      const raw = await res.text();
 
-      if (!res.ok) {
+      if (!contentType.includes("application/json")) {
+        console.error("GET /api/sources returned non-JSON:", raw);
+        throw new Error("Sources API returned HTML instead of JSON");
+      }
+
+      const data = JSON.parse(raw);
+
+      if (!res.ok || !data.success) {
         throw new Error(data.error || "Failed to load sources");
       }
 
       setSources(data.sources || []);
     } catch (err) {
-      console.error(err);
-      setError("Failed to load sources");
+      console.error("Load sources error:", err);
+      setError(err instanceof Error ? err.message : "Failed to load sources");
     } finally {
       setLoading(false);
     }
@@ -43,21 +51,33 @@ export default function SourceList() {
   async function handleDelete(id: string) {
     try {
       setDeletingId(id);
+      setError(null);
 
       const res = await fetch(`/api/sources/${id}`, {
         method: "DELETE",
+        headers: {
+          Accept: "application/json",
+        },
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      const raw = await res.text();
 
-      if (!res.ok) {
-        throw new Error(data.error || "Delete failed");
+      if (!contentType.includes("application/json")) {
+        console.error(`DELETE /api/sources/${id} returned non-JSON:`, raw);
+        throw new Error("Delete API returned HTML instead of JSON");
       }
 
-      setSources((prev) => prev.filter((s) => s.id !== id));
+      const data = JSON.parse(raw);
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to delete source");
+      }
+
+      setSources((prev) => prev.filter((item) => item.id !== id));
     } catch (err) {
-      console.error(err);
-      setError("Failed to delete source");
+      console.error("Delete source error:", err);
+      setError(err instanceof Error ? err.message : "Failed to delete source");
     } finally {
       setDeletingId(null);
     }
@@ -68,36 +88,43 @@ export default function SourceList() {
   }, []);
 
   if (loading) {
-    return <div className="text-neutral-400">Loading sources...</div>;
+    return <div className="text-sm text-neutral-400">Loading sources...</div>;
   }
 
   return (
-    <div className="space-y-3">
-      {error && <div className="text-red-400">{error}</div>}
-
-      {sources.length === 0 && (
-        <div className="text-neutral-500">No sources uploaded yet.</div>
-      )}
-
-      {sources.map((source) => (
-        <div
-          key={source.id}
-          className="flex items-center justify-between rounded-lg border border-neutral-800 p-3"
-        >
-          <div>
-            <div className="text-white text-sm">{source.name}</div>
-            <div className="text-neutral-500 text-xs">{source.type}</div>
-          </div>
-
-          <button
-            onClick={() => handleDelete(source.id)}
-            disabled={deletingId === source.id}
-            className="text-red-400 text-sm"
-          >
-            {deletingId === source.id ? "Deleting..." : "Delete"}
-          </button>
+    <div className="space-y-4">
+      {error ? (
+        <div className="rounded-lg border border-red-800 bg-red-950/30 p-3 text-sm text-red-300">
+          {error}
         </div>
-      ))}
+      ) : null}
+
+      {sources.length === 0 ? (
+        <div className="text-sm text-neutral-500">No sources uploaded yet.</div>
+      ) : (
+        sources.map((source) => (
+          <div
+            key={source.id}
+            className="flex items-center justify-between rounded-lg border border-neutral-800 p-4"
+          >
+            <div>
+              <div className="text-sm text-white">{source.name}</div>
+              <div className="text-xs text-neutral-500">
+                {source.type} • {new Date(source.createdAt).toLocaleString()}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleDelete(source.id)}
+              disabled={deletingId === source.id}
+              className="rounded border border-red-700 px-3 py-1 text-sm text-red-300"
+            >
+              {deletingId === source.id ? "Deleting..." : "Delete"}
+            </button>
+          </div>
+        ))
+      )}
     </div>
   );
 }

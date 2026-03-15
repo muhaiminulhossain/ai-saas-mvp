@@ -8,6 +8,11 @@ export type SourceItem = {
   createdAt: string;
   filePath?: string;
   namespace?: string;
+  meta?: {
+    originalUrl?: string;
+    pageCount?: number;
+    notes?: string;
+  };
 };
 
 const dataDir = path.join(process.cwd(), "data");

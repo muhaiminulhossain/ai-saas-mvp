@@ -1,63 +1,55 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-server";
+import fs from "fs/promises";
+import path from "path";
 
-export const runtime = "nodejs";
+type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
 
-function getBearerToken(req: Request) {
-  const h = req.headers.get("authorization") || "";
-  return h.startsWith("Bearer ") ? h.slice(7) : null;
+type ChatRecord = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+};
+
+const dataDir = path.join(process.cwd(), "data");
+const chatsFile = path.join(dataDir, "chats.json");
+
+async function ensureStore() {
+  await fs.mkdir(dataDir, { recursive: true });
+
+  try {
+    await fs.access(chatsFile);
+  } catch {
+    await fs.writeFile(chatsFile, JSON.stringify([], null, 2), "utf-8");
+  }
 }
 
-export async function GET(req: Request) {
+async function readChats(): Promise<ChatRecord[]> {
+  await ensureStore();
+  const raw = await fs.readFile(chatsFile, "utf-8");
+  return JSON.parse(raw) as ChatRecord[];
+}
+
+export async function GET() {
   try {
-    const token = getBearerToken(req);
-    if (!token) {
-      return NextResponse.json({ error: "Missing auth token" }, { status: 401 });
-    }
+    const chats = await readChats();
 
-    const admin = supabaseAdmin();
-    const { data: userData, error: userErr } = await admin.auth.getUser(token);
+    return NextResponse.json({
+      success: true,
+      chats: chats.sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      ),
+    });
+  } catch (error) {
+    console.error("GET /api/chats failed:", error);
 
-    if (userErr || !userData?.user) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
-
-    const user = userData.user;
-
-    const chatsRes = await admin
-      .from("chats")
-      .select("id, created_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (chatsRes.error) {
-      return NextResponse.json({ error: chatsRes.error.message }, { status: 500 });
-    }
-
-    const chats = chatsRes.data ?? [];
-
-    const withPreview = await Promise.all(
-      chats.map(async (chat) => {
-        const firstUserMsg = await admin
-          .from("messages")
-          .select("content")
-          .eq("chat_id", chat.id)
-          .eq("role", "user")
-          .order("created_at", { ascending: true })
-          .limit(1)
-          .maybeSingle();
-
-        return {
-          ...chat,
-          title: firstUserMsg.data?.content?.slice(0, 60) || "New chat",
-        };
-      })
-    );
-
-    return NextResponse.json({ chats: withPreview });
-  } catch (e: any) {
     return NextResponse.json(
-      { error: e?.message ?? "Server error" },
+      { success: false, error: "Failed to fetch chats" },
       { status: 500 }
     );
   }

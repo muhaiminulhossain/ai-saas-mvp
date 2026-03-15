@@ -41,7 +41,6 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: "Source deleted successfully",
       deletedId: id,
     });
   } catch (error) {

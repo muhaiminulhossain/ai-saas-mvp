@@ -2,19 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 import OpenAI from "openai";
+import { getAllSources } from "@/lib/sources";
 
 type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
 };
 
-type StoredSource = {
+type ChatRecord = {
   id: string;
-  name: string;
-  type: string;
+  title: string;
   createdAt: string;
-  filePath?: string;
-  namespace?: string;
+  updatedAt: string;
+  messages: ChatMessage[];
 };
 
 type UrlSnapshotPage = {
@@ -40,8 +40,30 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const SOURCES_FILE = path.join(process.cwd(), "data", "sources.json");
+const dataDir = path.join(process.cwd(), "data");
+const chatsFile = path.join(dataDir, "chats.json");
 const MAX_SOURCE_CHARS = 18000;
+
+async function ensureChatsStore() {
+  await fs.mkdir(dataDir, { recursive: true });
+
+  try {
+    await fs.access(chatsFile);
+  } catch {
+    await fs.writeFile(chatsFile, JSON.stringify([], null, 2), "utf-8");
+  }
+}
+
+async function readChats(): Promise<ChatRecord[]> {
+  await ensureChatsStore();
+  const raw = await fs.readFile(chatsFile, "utf-8");
+  return JSON.parse(raw) as ChatRecord[];
+}
+
+async function writeChats(chats: ChatRecord[]) {
+  await ensureChatsStore();
+  await fs.writeFile(chatsFile, JSON.stringify(chats, null, 2), "utf-8");
+}
 
 async function readJsonFile<T>(filePath: string): Promise<T | null> {
   try {
@@ -52,86 +74,87 @@ async function readJsonFile<T>(filePath: string): Promise<T | null> {
   }
 }
 
-async function getAllSources(): Promise<StoredSource[]> {
-  const data = await readJsonFile<StoredSource[]>(SOURCES_FILE);
-  return Array.isArray(data) ? data : [];
-}
-
 function trimText(text: string, maxChars: number) {
   if (text.length <= maxChars) return text;
   return `${text.slice(0, maxChars)}\n\n[truncated]`;
 }
 
-async function buildUrlSourceContext(source: StoredSource): Promise<string | null> {
-  if (!source.filePath) return null;
-
-  const absolutePath = path.join(process.cwd(), source.filePath);
-  const snapshot = await readJsonFile<UrlSnapshot>(absolutePath);
-
-  if (!snapshot || !Array.isArray(snapshot.pages) || snapshot.pages.length === 0) {
-    return null;
-  }
-
-  const pageBlocks = snapshot.pages.map((page, index) => {
-    const parts = [
-      `Page ${index + 1}`,
-      `URL: ${page.url}`,
-      `Title: ${page.title || "Untitled"}`,
-    ];
-
-    if (page.description) {
-      parts.push(`Description: ${page.description}`);
-    }
-
-    parts.push(`Content:\n${page.content || ""}`);
-
-    return parts.join("\n");
-  });
-
-  const combined = [
-    `SOURCE ID: ${source.id}`,
-    `SOURCE NAME: ${source.name}`,
-    `SOURCE TYPE: URL`,
-    `ROOT URL: ${snapshot.url}`,
-    snapshot.notes ? `NOTES: ${snapshot.notes}` : "",
-    `PAGES CRAWLED: ${snapshot.pageCount}`,
-    "",
-    pageBlocks.join("\n\n---\n\n"),
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  return trimText(combined, MAX_SOURCE_CHARS);
-}
-
-async function buildAllSourceContext(): Promise<string> {
+async function buildSourceContext(): Promise<string> {
   const sources = await getAllSources();
-
-  if (sources.length === 0) {
-    return "No sources are currently available.";
-  }
-
   const blocks: string[] = [];
 
   for (const source of sources) {
-    if (source.type === "url") {
-      const urlContext = await buildUrlSourceContext(source);
-      if (urlContext) {
-        blocks.push(urlContext);
+    if (source.type === "url" && source.filePath) {
+      const absolutePath = path.join(process.cwd(), source.filePath);
+      const snapshot = await readJsonFile<UrlSnapshot>(absolutePath);
+
+      if (snapshot?.pages?.length) {
+        const pageText = snapshot.pages
+          .map((page, index) => {
+            return [
+              `Page ${index + 1}`,
+              `URL: ${page.url}`,
+              `Title: ${page.title || "Untitled"}`,
+              page.description ? `Description: ${page.description}` : "",
+              `Content:\n${page.content || ""}`,
+            ]
+              .filter(Boolean)
+              .join("\n");
+          })
+          .join("\n\n---\n\n");
+
+        blocks.push(
+          trimText(
+            [
+              `SOURCE ID: ${source.id}`,
+              `SOURCE NAME: ${source.name}`,
+              `SOURCE TYPE: URL`,
+              snapshot.notes ? `NOTES: ${snapshot.notes}` : "",
+              `ROOT URL: ${snapshot.url}`,
+              `PAGES CRAWLED: ${snapshot.pageCount}`,
+              "",
+              pageText,
+            ]
+              .filter(Boolean)
+              .join("\n"),
+            MAX_SOURCE_CHARS
+          )
+        );
+        continue;
       }
-      continue;
     }
 
-    // For non-URL sources, keep a lightweight placeholder for now.
-    // You can expand this later to support PDFs/docs via chunk extraction.
-    blocks.push(
-      [
-        `SOURCE ID: ${source.id}`,
-        `SOURCE NAME: ${source.name}`,
-        `SOURCE TYPE: ${source.type.toUpperCase()}`,
-        `NOTE: This source is registered but full text retrieval is not implemented in this route yet.`,
-      ].join("\n")
-    );
+    if (source.filePath) {
+      try {
+        const absolutePath = path.join(process.cwd(), source.filePath);
+        const raw = await fs.readFile(absolutePath, "utf-8");
+
+        blocks.push(
+          trimText(
+            [
+              `SOURCE ID: ${source.id}`,
+              `SOURCE NAME: ${source.name}`,
+              `SOURCE TYPE: ${source.type.toUpperCase()}`,
+              `Content:\n${raw}`,
+            ].join("\n"),
+            MAX_SOURCE_CHARS
+          )
+        );
+      } catch {
+        blocks.push(
+          [
+            `SOURCE ID: ${source.id}`,
+            `SOURCE NAME: ${source.name}`,
+            `SOURCE TYPE: ${source.type.toUpperCase()}`,
+            `NOTE: Source exists but text could not be loaded.`,
+          ].join("\n")
+        );
+      }
+    }
+  }
+
+  if (!blocks.length) {
+    return "No sources are currently available.";
   }
 
   return blocks.join("\n\n====================\n\n");
@@ -139,19 +162,30 @@ async function buildAllSourceContext(): Promise<string> {
 
 function buildSystemPrompt(sourceContext: string) {
   return `
-You are a helpful assistant.
+You are a grounded AI sales, lead generation, and content strategy assistant.
 
 Use the provided SOURCES as the factual basis for your answer.
-You may explain or simplify the content in your own words for clarity.
-Do not add facts that are not supported by the sources.
+You may explain or organize the content in your own words for clarity.
+Do not invent facts that are not supported by the sources.
 
-If the answer is not present in the sources, say exactly:
+You can help with:
+- website understanding
+- product and service summaries
+- lead strategy
+- ICP ideas
+- outreach angles
+- sales pitch copy
+- LinkedIn posts
+- social media captions
+- campaign messaging
+- content strategy
+
+Rules:
+- If the user asks for strategy or content, ground it in the provided sources.
+- If the sources are weak or incomplete, say what is missing.
+- If the answer is not present in the sources, say exactly:
 "I don't know based on the provided sources."
-
-When the answer is supported by website sources:
-- Prefer the most relevant page content
-- Mention the page title or URL when useful
-- Be concise but informative
+- When helpful, structure outputs into sections such as insights, positioning, lead strategy, pitch, and content ideas.
 
 SOURCES:
 ${sourceContext}
@@ -163,67 +197,162 @@ function extractLatestUserMessage(messages: ChatMessage[]): string {
   return latest?.content?.trim() || "";
 }
 
+export async function GET(
+  _req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    const chats = await readChats();
+    const chat = chats.find((item) => item.id === id);
+
+    if (!chat) {
+      return NextResponse.json(
+        { success: false, error: "Chat not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      chat,
+    });
+  } catch (error) {
+    console.error("GET /api/chats/[id] failed:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Failed to fetch chat" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    const chats = await readChats();
+    const filtered = chats.filter((item) => item.id !== id);
+
+    if (filtered.length === chats.length) {
+      return NextResponse.json(
+        { success: false, error: "Chat not found" },
+        { status: 404 }
+      );
+    }
+
+    await writeChats(filtered);
+
+    return NextResponse.json({
+      success: true,
+      deletedId: id,
+    });
+  } catch (error) {
+    console.error("DELETE /api/chats/[id] failed:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Failed to delete chat" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    await context.params;
-
+    const { id } = await context.params;
     const body = await req.json();
+
     const incomingMessages = Array.isArray(body?.messages)
       ? (body.messages as ChatMessage[])
       : [];
 
-    const latestUserMessage =
+    const userMessage =
       typeof body?.message === "string" && body.message.trim()
         ? body.message.trim()
         : extractLatestUserMessage(incomingMessages);
 
-    if (!latestUserMessage) {
+    if (!userMessage) {
       return NextResponse.json(
         { success: false, error: "Missing user message" },
         { status: 400 }
       );
     }
 
-    const sourceContext = await buildAllSourceContext();
+    const sourceContext = await buildSourceContext();
     const systemPrompt = buildSystemPrompt(sourceContext);
-
-    const modelMessages: ChatMessage[] = [
-      {
-        role: "system",
-        content: systemPrompt,
-      },
-      ...incomingMessages.filter(
-        (m) =>
-          m &&
-          (m.role === "user" || m.role === "assistant") &&
-          typeof m.content === "string" &&
-          m.content.trim()
-      ),
-    ];
-
-    if (!incomingMessages.length) {
-      modelMessages.push({
-        role: "user",
-        content: latestUserMessage,
-      });
-    }
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.2,
-      messages: modelMessages,
+      temperature: 0.3,
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+        ...incomingMessages.filter(
+          (m) =>
+            m &&
+            (m.role === "user" || m.role === "assistant") &&
+            typeof m.content === "string" &&
+            m.content.trim()
+        ),
+        ...(incomingMessages.length
+          ? []
+          : [
+              {
+                role: "user" as const,
+                content: userMessage,
+              },
+            ]),
+      ],
     });
 
     const answer =
       completion.choices?.[0]?.message?.content?.trim() ||
       "I don't know based on the provided sources.";
 
+    const chats = await readChats();
+    const existing = chats.find((item) => item.id === id);
+
+    const updatedMessages: ChatMessage[] = incomingMessages.length
+      ? [...incomingMessages, { role: "assistant", content: answer }]
+      : [
+          { role: "user", content: userMessage },
+          { role: "assistant", content: answer },
+        ];
+
+    const now = new Date().toISOString();
+
+    if (existing) {
+      existing.messages = updatedMessages;
+      existing.updatedAt = now;
+      if (
+        (!existing.title || existing.title === "New chat") &&
+        userMessage.trim()
+      ) {
+        existing.title = userMessage.slice(0, 60);
+      }
+    } else {
+      chats.unshift({
+        id,
+        title: userMessage.slice(0, 60) || "New chat",
+        createdAt: now,
+        updatedAt: now,
+        messages: updatedMessages,
+      });
+    }
+
+    await writeChats(chats);
+
     return NextResponse.json({
       success: true,
       answer,
+      messages: updatedMessages,
     });
   } catch (error) {
     console.error("POST /api/chats/[id] failed:", error);

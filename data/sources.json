@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "id": "d925b048-6d7f-47e6-a908-25efd05f9385",
+    "name": "Apple",
+    "type": "url",
+    "createdAt": "2026-03-15T12:35:18.633Z",
+    "filePath": "data/url-sources/d925b048-6d7f-47e6-a908-25efd05f9385.json"
+  }
+]

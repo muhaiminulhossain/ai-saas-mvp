@@ -49,7 +49,7 @@ export default function SourcesPage() {
 
       setSources(data.sources || []);
     } catch (err) {
-      console.error(err);
+      console.error("Load sources error:", err);
       setError(err instanceof Error ? err.message : "Failed to load sources");
     } finally {
       setLoading(false);
@@ -85,7 +85,7 @@ export default function SourcesPage() {
       setSuccess("File source added successfully.");
       await loadSources();
     } catch (err) {
-      console.error(err);
+      console.error("Upload file error:", err);
       setError(err instanceof Error ? err.message : "Failed to upload file");
     } finally {
       setUploadingFile(false);
@@ -139,7 +139,7 @@ export default function SourcesPage() {
       setSuccess("Website source added successfully.");
       await loadSources();
     } catch (err) {
-      console.error(err);
+      console.error("Add URL source error:", err);
       setError(err instanceof Error ? err.message : "Failed to add URL source");
     } finally {
       setAddingUrl(false);
@@ -168,7 +168,7 @@ export default function SourcesPage() {
       setSources((prev) => prev.filter((item) => item.id !== id));
       setSuccess("Source deleted successfully.");
     } catch (err) {
-      console.error(err);
+      console.error("Delete source error:", err);
       setError(err instanceof Error ? err.message : "Failed to delete source");
     } finally {
       setDeletingId(null);
@@ -201,7 +201,11 @@ export default function SourcesPage() {
             <div className="mt-5 inline-flex rounded-xl border border-neutral-800 bg-black p-1">
               <button
                 type="button"
-                onClick={() => setMode("file")}
+                onClick={() => {
+                  setMode("file");
+                  setError(null);
+                  setSuccess(null);
+                }}
                 className={`rounded-lg px-4 py-2 text-sm transition ${
                   mode === "file"
                     ? "bg-white text-black"
@@ -212,7 +216,11 @@ export default function SourcesPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setMode("url")}
+                onClick={() => {
+                  setMode("url");
+                  setError(null);
+                  setSuccess(null);
+                }}
                 className={`rounded-lg px-4 py-2 text-sm transition ${
                   mode === "url"
                     ? "bg-white text-black"
@@ -236,11 +244,17 @@ export default function SourcesPage() {
                   />
                 </div>
 
+                {selectedFile ? (
+                  <div className="rounded-lg border border-neutral-800 bg-black p-3 text-sm text-neutral-300">
+                    Selected: {selectedFile.name}
+                  </div>
+                ) : null}
+
                 <button
                   type="button"
                   onClick={handleUploadFile}
                   disabled={uploadingFile}
-                  className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black disabled:opacity-60"
+                  className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {uploadingFile ? "Uploading..." : "Add File Source"}
                 </button>
@@ -254,9 +268,13 @@ export default function SourcesPage() {
                   <input
                     type="url"
                     value={url}
-                    onChange={(e) => setUrl(e.target.value)}
+                    onChange={(e) => {
+                      setUrl(e.target.value);
+                      setError(null);
+                      setSuccess(null);
+                    }}
                     placeholder="https://example.com"
-                    className="block w-full rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-200"
+                    className="block w-full rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-500"
                   />
                 </div>
 
@@ -268,7 +286,7 @@ export default function SourcesPage() {
                     <select
                       value={crawlDepth}
                       onChange={(e) => setCrawlDepth(e.target.value)}
-                      className="block w-full rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-200"
+                      className="block w-full rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-200 outline-none"
                     >
                       <option value="1">1 level</option>
                       <option value="2">2 levels</option>
@@ -283,6 +301,7 @@ export default function SourcesPage() {
                         type="checkbox"
                         checked={includeSubpages}
                         onChange={(e) => setIncludeSubpages(e.target.checked)}
+                        className="h-4 w-4"
                       />
                       Include subpages
                     </label>
@@ -298,7 +317,7 @@ export default function SourcesPage() {
                     onChange={(e) => setUrlNotes(e.target.value)}
                     rows={4}
                     placeholder="Example: Fetch homepage, product catalog, pricing, services, and structure it for LinkedIn/social content."
-                    className="block w-full rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-200"
+                    className="block w-full rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-200 outline-none placeholder:text-neutral-500"
                   />
                 </div>
 
@@ -306,7 +325,7 @@ export default function SourcesPage() {
                   type="button"
                   onClick={handleAddUrl}
                   disabled={addingUrl}
-                  className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black disabled:opacity-60"
+                  className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {addingUrl ? "Adding URL..." : "Add Website Source"}
                 </button>
@@ -331,7 +350,7 @@ export default function SourcesPage() {
                   type="button"
                   onClick={loadSources}
                   disabled={loading}
-                  className="rounded-lg border border-neutral-700 px-3 py-2 text-sm text-neutral-200"
+                  className="rounded-lg border border-neutral-700 px-3 py-2 text-sm text-neutral-200 disabled:opacity-50"
                 >
                   Refresh
                 </button>
@@ -381,7 +400,7 @@ export default function SourcesPage() {
                         type="button"
                         onClick={() => handleDelete(source.id)}
                         disabled={deletingId === source.id}
-                        className="ml-4 rounded-lg border border-red-800 px-3 py-2 text-sm text-red-300 disabled:opacity-50"
+                        className="ml-4 rounded-lg border border-red-800 px-3 py-2 text-sm text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {deletingId === source.id ? "Deleting..." : "Delete"}
                       </button>

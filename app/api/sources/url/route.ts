@@ -58,17 +58,15 @@ function extractTitle(html: string): string {
 
 function extractMetaDescription(html: string): string {
   const patterns = [
-    /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["'][^>]*>/i,
-    /<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["'][^>]*>/i,
-    /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']*)["'][^>]*>/i,
-    /<meta[^>]+content=["']([^"']*)["'][^>]+property=["']og:description["'][^>]*>/i,
+    /<meta[^>]+name=["']description["'][^>]+content=["']([^"]*)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"]*)["'][^>]+name=["']description["'][^>]*>/i,
+    /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"]*)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"]*)["'][^>]+property=["']og:description["'][^>]*>/i,
   ];
 
   for (const pattern of patterns) {
     const match = html.match(pattern);
-    if (match?.[1]) {
-      return match[1].trim();
-    }
+    if (match?.[1]) return match[1].trim();
   }
 
   return "";
@@ -101,10 +99,10 @@ function extractLinks(html: string, baseUrl: string): string[] {
   return [...links];
 }
 
-async function fetchPage(url: string): Promise<CrawledPage> {
+async function fetchHtml(url: string): Promise<{ html: string; finalUrl: string }> {
   const response = await fetch(url, {
     headers: {
-      "User-Agent": "ai-saas-mvp-bot/1.0",
+      "User-Agent": "Mozilla/5.0 (compatible; ai-saas-mvp-bot/1.0)",
       Accept: "text/html,application/xhtml+xml",
     },
     redirect: "follow",
@@ -112,24 +110,29 @@ async function fetchPage(url: string): Promise<CrawledPage> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch ${url} (${response.status})`);
+    throw new Error(`Website returned ${response.status}`);
   }
 
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("text/html")) {
-    throw new Error(`URL did not return HTML: ${url}`);
+    throw new Error(`Website did not return HTML. Received: ${contentType || "unknown"}`);
   }
 
   const html = await response.text();
-  const title = extractTitle(html);
-  const description = extractMetaDescription(html);
-  const content = stripHtml(html).slice(0, MAX_CONTENT_LENGTH);
+  return {
+    html,
+    finalUrl: response.url || url,
+  };
+}
+
+async function fetchPage(url: string): Promise<CrawledPage> {
+  const { html, finalUrl } = await fetchHtml(url);
 
   return {
-    url,
-    title,
-    description,
-    content,
+    url: finalUrl,
+    title: extractTitle(html),
+    description: extractMetaDescription(html),
+    content: stripHtml(html).slice(0, MAX_CONTENT_LENGTH),
   };
 }
 
@@ -150,40 +153,24 @@ async function crawlSite(
     if (!current) break;
 
     const currentUrl = normalizeUrl(current.url);
-
     if (visited.has(currentUrl)) continue;
     visited.add(currentUrl);
 
     try {
-      const response = await fetch(currentUrl, {
-        headers: {
-          "User-Agent": "ai-saas-mvp-bot/1.0",
-          Accept: "text/html,application/xhtml+xml",
-        },
-        redirect: "follow",
-        cache: "no-store",
-      });
+      const { html, finalUrl } = await fetchHtml(currentUrl);
 
-      if (!response.ok) continue;
-
-      const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("text/html")) continue;
-
-      const html = await response.text();
-      const page: CrawledPage = {
-        url: currentUrl,
+      pages.push({
+        url: finalUrl,
         title: extractTitle(html),
         description: extractMetaDescription(html),
         content: stripHtml(html).slice(0, MAX_CONTENT_LENGTH),
-      };
-
-      pages.push(page);
+      });
 
       if (!includeSubpages || current.depth >= crawlDepth) {
         continue;
       }
 
-      const links = extractLinks(html, currentUrl);
+      const links = extractLinks(html, finalUrl);
 
       for (const link of links) {
         if (!isSameOrigin(link, normalizedStartUrl)) continue;
@@ -211,7 +198,7 @@ export async function POST(req: NextRequest) {
     const crawlDepth =
       typeof body.crawlDepth === "number" && body.crawlDepth >= 0
         ? Math.min(body.crawlDepth, 4)
-        : 2;
+        : 1;
     const includeSubpages = Boolean(body.includeSubpages);
     const notes = body.notes?.trim() || "";
 
@@ -232,13 +219,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const pages = includeSubpages
-      ? await crawlSite(normalizedUrl, crawlDepth, includeSubpages)
-      : [await fetchPage(normalizedUrl)];
+    let pages: CrawledPage[] = [];
+
+    try {
+      pages = includeSubpages
+        ? await crawlSite(normalizedUrl, crawlDepth, includeSubpages)
+        : [await fetchPage(normalizedUrl)];
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not fetch website";
+      return NextResponse.json(
+        { success: false, error: message },
+        { status: 400 }
+      );
+    }
 
     if (pages.length === 0) {
       return NextResponse.json(
-        { success: false, error: "Could not extract readable website content" },
+        {
+          success: false,
+          error:
+            "Could not extract readable website content. Try crawl depth 1 or disable subpages.",
+        },
         { status: 400 }
       );
     }
@@ -249,6 +251,8 @@ export async function POST(req: NextRequest) {
     const storageDir = path.join(process.cwd(), "data", "url-sources");
     await fs.mkdir(storageDir, { recursive: true });
 
+    const createdAt = new Date().toISOString();
+
     const snapshot = {
       id: sourceId,
       sourceType: "url",
@@ -257,7 +261,7 @@ export async function POST(req: NextRequest) {
       includeSubpages,
       notes,
       pageCount: pages.length,
-      createdAt: new Date().toISOString(),
+      createdAt,
       pages,
       marketingPotential: {
         canGenerateSocialContent: true,
@@ -276,8 +280,13 @@ export async function POST(req: NextRequest) {
       id: sourceId,
       name: primaryPage.title || normalizedUrl,
       type: "url",
-      createdAt: new Date().toISOString(),
+      createdAt,
       filePath: relativePath,
+      meta: {
+        originalUrl: normalizedUrl,
+        pageCount: pages.length,
+        notes,
+      },
     });
 
     return NextResponse.json({
@@ -286,7 +295,7 @@ export async function POST(req: NextRequest) {
         id: sourceId,
         name: primaryPage.title || normalizedUrl,
         type: "url",
-        createdAt: new Date().toISOString(),
+        createdAt,
       },
       summary: {
         url: normalizedUrl,
@@ -298,8 +307,11 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("POST /api/sources/url failed:", error);
 
+    const message =
+      error instanceof Error ? error.message : "Failed to add website source";
+
     return NextResponse.json(
-      { success: false, error: "Failed to add website source" },
+      { success: false, error: message },
       { status: 500 }
     );
   }

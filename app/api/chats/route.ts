@@ -1,55 +1,50 @@
-import { NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseRoute } from "@/lib/supabase-server";
 
-type ChatMessage = {
-  role: "system" | "user" | "assistant";
-  content: string;
-};
-
-type ChatRecord = {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  messages: ChatMessage[];
-};
-
-const dataDir = path.join(process.cwd(), "data");
-const chatsFile = path.join(dataDir, "chats.json");
-
-async function ensureStore() {
-  await fs.mkdir(dataDir, { recursive: true });
-
+export async function POST(req: NextRequest) {
   try {
-    await fs.access(chatsFile);
-  } catch {
-    await fs.writeFile(chatsFile, JSON.stringify([], null, 2), "utf-8");
-  }
-}
+    const { supabase, responseHeaders } = supabaseRoute(req);
 
-async function readChats(): Promise<ChatRecord[]> {
-  await ensureStore();
-  const raw = await fs.readFile(chatsFile, "utf-8");
-  return JSON.parse(raw) as ChatRecord[];
-}
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-export async function GET() {
-  try {
-    const chats = await readChats();
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401, headers: responseHeaders }
+      );
+    }
 
-    return NextResponse.json({
-      success: true,
-      chats: chats.sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      ),
-    });
-  } catch (error) {
-    console.error("GET /api/chats failed:", error);
+    const body = await req.json();
+    const title = body.title?.trim() || "New Chat";
+
+    const { data, error } = await supabase
+      .from("chats")
+      .insert({
+        title,
+        user_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
 
     return NextResponse.json(
-      { success: false, error: "Failed to fetch chats" },
+      {
+        success: true,
+        chat: data,
+      },
+      { headers: responseHeaders }
+    );
+  } catch (error) {
+    console.error("Create chat error:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Failed to create chat" },
       { status: 500 }
     );
   }

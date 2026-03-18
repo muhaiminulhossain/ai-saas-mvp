@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { supabaseRoute } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createSupabaseServerClient();
+    const { supabase, responseHeaders } = supabaseRoute(req);
 
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
-        { status: 401 }
+        { status: 401, headers: responseHeaders }
       );
     }
 
     const body = await req.json();
-
     const { chat_id, role, content } = body;
 
     const { data, error } = await supabase
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
         chat_id,
         role,
         content,
-        user_id: user.id, // 🔥 REQUIRED for RLS
+        user_id: user.id,
       })
       .select()
       .single();
@@ -35,10 +35,13 @@ export async function POST(req: NextRequest) {
       throw error;
     }
 
-    return NextResponse.json({
-      success: true,
-      message: data,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        message: data,
+      },
+      { headers: responseHeaders }
+    );
   } catch (error) {
     console.error("Insert message error:", error);
 

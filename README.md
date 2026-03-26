@@ -1,82 +1,79 @@
-# 🧠 AI SaaS RAG Agent — Source-Aware Chat + GTM Content Engine
+# 🧠 AI SaaS Agent — Source-Aware Chat + GTM Engine
 
-An AI-powered SaaS application that ingests **websites & documents**, builds structured context, and enables **context-aware chat, lead generation, and sales content creation**.
-
-This project demonstrates how to architect a **production-ready Retrieval-Augmented Generation (RAG) system** with:
-
-- 🔐 Secure multi-tenant data (Supabase + RLS)
-- 🌐 Website crawling & structured ingestion
-- 💬 Context-aware AI chat
-- 📈 GTM content generation (sales, lead strategy, social content)
+> Turn any website or document into a sales strategist, content generator, and knowledge engine.
 
 ---
 
-## 🚀 What This Project Solves
+## 🚀 Demo Flow
 
-Most AI chat apps fail at:
-- ❌ Using real business context
-- ❌ Structuring external data
-- ❌ Generating actionable outputs (sales, leads, strategy)
-
-This system bridges that gap by:
-
-> Turning raw website/data inputs → into structured knowledge → into business-ready outputs
+1. Add a website (e.g. ecommerce, SaaS, brand)
+2. System crawls & structures content
+3. Ask:
+   - “Give me ICP”
+   - “Write LinkedIn posts”
+   - “Create sales pitch”
+4. Get **context-aware outputs**
 
 ---
 
-## ⚙️ Core Features
+## ✨ What It Does
 
-### 📥 Source Ingestion
+### 📥 Ingests Data
 - Upload files (PDF / docs)
-- Add websites (URL-based crawling)
-- Extract:
-  - Titles
-  - Descriptions
-  - Full page content
-  - Internal links (controlled crawl depth)
+- Add websites (URL crawling)
+- Extracts:
+  - page content
+  - metadata
+  - internal links
 
 ---
 
-### 🧠 AI Chat (RAG-powered)
-- Answers based only on uploaded sources
-- Prevents hallucination via source grounding
-- Maintains chat history per user
+### 💬 AI Chat (RAG-style)
+- Answers ONLY from your data
+- Avoids hallucination
+- Maintains chat history
 
 ---
 
-### 📊 GTM Intelligence Layer
-The agent can generate:
+### 📈 GTM Engine (Real Differentiator)
 
-- Lead generation strategies
-- ICP (Ideal Customer Profile)
-- Sales pitches
-- LinkedIn content
-- Marketing angles
-- Product positioning
+Generates:
 
-All grounded in real source data.
-
----
-
-### 🔐 Multi-Tenant Security (Supabase + RLS)
-- Row Level Security (RLS) enforced
-- Per-user isolation of:
-  - sources
-  - chats
-  - messages
-- Auth-integrated backend APIs
+- 🧲 Lead strategies  
+- 🎯 ICP definitions  
+- 💬 Sales pitch  
+- 🧵 LinkedIn content  
+- 📣 Marketing angles  
 
 ---
 
 ## 🏗️ Architecture
+Next.js (Frontend)
+↓
+API Routes (Server)
+↓
+Supabase (Auth + DB + RLS)
+↓
+Source Snapshots (JSON)
+↓
+OpenAI (LLM)
 
-```bash
-Frontend (Next.js App Router)
-        ↓
-API Routes (Server-side logic)
-        ↓
-Supabase (Auth + Postgres + RLS)
-        ↓
-Source Storage (JSON snapshots)
-        ↓
-OpenAI (LLM for reasoning)
+
+---
+
+## 🔐 Security (RLS)
+
+Each table is protected with:
+
+```sql
+user_id = auth.uid()
+
+Built By
+
+Muhaiminul Hossain
+Product Leader → AI Systems Builder
+
+🔗 LinkedIn: https://www.linkedin.com/in/muhaiminulhossain/
+
+💻 GitHub: https://github.com/muhaiminulhossain
+
